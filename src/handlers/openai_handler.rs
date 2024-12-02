@@ -1,7 +1,7 @@
 use crate::models::prompt::Prompt;
 use crate::services::openai_service::OpenAIService;
 use actix_web::{web, HttpResponse, Responder};
-use futures::stream::{StreamExt, TryStreamExt};
+use futures::stream::TryStreamExt;
 
 pub async fn chat_handler(
     prompt: web::Json<Prompt>,
@@ -19,8 +19,8 @@ pub async fn chat_handler(
 }
 
 pub async fn state_handler(openai_service: web::Data<OpenAIService>) -> impl Responder {
-    // Placeholder for subscription state
+    let remain_token = openai_service.remain_token().await;
     HttpResponse::Ok().json(serde_json::json!({
-        "remain_token": 0
+        "remain_token": remain_token
     }))
 }

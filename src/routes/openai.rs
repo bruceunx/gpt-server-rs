@@ -5,7 +5,11 @@ use actix_web::{web, Scope};
 
 pub fn openai_routes() -> Scope {
     let config = Config::new();
-    let openai_service = web::Data::new(OpenAIService::new(config.openai_url, config.openai_key));
+    let openai_service = web::Data::new(OpenAIService::new(
+        config.openai_url,
+        config.openai_key,
+        config.openai_subscription_url.unwrap_or("".to_string()),
+    ));
 
     web::scope("/openai")
         .app_data(openai_service.clone())
