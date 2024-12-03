@@ -7,7 +7,7 @@ mod models;
 mod routes;
 mod services;
 
-#[actix_rt::main]
+#[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
     env_logger::init();
