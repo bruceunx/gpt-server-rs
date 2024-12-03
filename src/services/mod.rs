@@ -1,7 +1,7 @@
 use super::models::prompt::Prompt;
 use chrono::prelude::*;
 use futures::stream::{Stream, StreamExt};
-use redis_async::{client::PairedConnection, resp::RespValue, resp_array};
+use redis_async::{client::PairedConnection, resp_array};
 use reqwest::{header, Client, Proxy};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -64,18 +64,14 @@ async fn rate_limit(redis_client: &PairedConnection, rate_limit: u16) -> bool {
         Err(_) => return false,
     };
 
-    // println!("current_count {}, {}", current_count, rate_limit);
-    // if current_count == 1 {
-    //     let _: i64 = redis_client
-    //         .clone()
-    //         .send(resp_array![
-    //             "EXPIREAT",
-    //             &redis_key,
-    //             RespValue::Integer((now + chrono::Duration::minutes(1)).timestamp())
-    //         ])
-    //         .await
-    //         .unwrap();
-    // }
+    if current_count == 1 {
+        let expire_timestamp = (now + chrono::Duration::minutes(1)).timestamp();
+        connect_inner.send_and_forget(resp_array![
+            "EXPIREAT",
+            &redis_key,
+            expire_timestamp.to_string()
+        ]);
+    }
 
     current_count <= rate_limit as i64
 }
