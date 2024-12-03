@@ -4,11 +4,11 @@ use actix_web::{web, Scope};
 use crate::services::{ApiServiceManager, ApiSupplier};
 use std::env;
 
-pub fn openai_routes() -> Scope {
-    let openai_supplier = ApiSupplier::OpenAi {
-        url: env::var("OPENAI_URL").unwrap_or("".to_string()),
-        api_key: env::var("OPENAICLAUDE_KEY").unwrap_or("".to_string()),
-        model: env::var("OPENAICLAUDE_MODEL").unwrap_or("gpt-4o-turbo".to_string()),
+pub fn claude_routes() -> Scope {
+    let openai_supplier = ApiSupplier::Claude {
+        url: env::var("CLAUDE_URL").unwrap_or("".to_string()),
+        api_key: env::var("CLAUDE_KEY").unwrap_or("".to_string()),
+        model: env::var("CLAUDE_MODEL").unwrap_or("gpt-4o-turbo".to_string()),
     };
 
     let openai_service = web::Data::new(ApiServiceManager::new(openai_supplier));
