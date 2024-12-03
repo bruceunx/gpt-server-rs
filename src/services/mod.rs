@@ -3,6 +3,7 @@ use chrono::prelude::*;
 use futures::stream::{Stream, StreamExt};
 use redis_async::{client::PairedConnection, resp_array};
 use reqwest::{header, Client, Proxy};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::env;
@@ -168,7 +169,7 @@ impl ApiServiceManager {
                 .collect();
         }
 
-        let response = match self.supplier {
+        match self.supplier {
             ApiSupplier::Gemini { .. } => {
                 let mut contents: Vec<Value> = Vec::new();
                 let mut sys_message: Option<String> = None;
@@ -203,12 +204,30 @@ impl ApiServiceManager {
                     "model": model,
                     "contents": contents,
                 });
-                self.client
+                let response = self
+                    .client
                     .post(url)
                     .json(&request_body)
                     .send()
                     .await
-                    .map_err(|e| format!("Failed to send request: {}", e))?
+                    .map_err(|e| format!("Failed to send request: {}", e))?;
+
+                let stream = response.bytes_stream().map(|item| {
+                    item.map(|bytes| {
+                        let chunk = String::from_utf8_lossy(&bytes);
+
+                        if chunk.trim().is_empty() {
+                            return "data: [DONE]".to_owned();
+                        }
+
+                        match parse_and_transform_chunk(&chunk) {
+                            Ok(openai_response) => openai_response.to_owned(),
+                            Err(_) => "data: [DONE]".to_owned(),
+                        }
+                    })
+                });
+
+                Ok(Box::pin(stream))
             }
             _ => {
                 let request_body = serde_json::json!({
@@ -217,7 +236,8 @@ impl ApiServiceManager {
                     "messages": truncated_messages
                 });
 
-                self.client
+                let response = self
+                    .client
                     .post(self.supplier.get_url().await)
                     .header(
                         header::AUTHORIZATION,
@@ -227,14 +247,82 @@ impl ApiServiceManager {
                     .json(&request_body)
                     .send()
                     .await
-                    .map_err(|e| format!("Failed to send request: {}", e))?
+                    .map_err(|e| format!("Failed to send request: {}", e))?;
+
+                let stream = response
+                    .bytes_stream()
+                    .map(|item| item.map(|bytes| String::from_utf8_lossy(&bytes).into_owned()));
+                Ok(Box::pin(stream))
             }
-        };
+        }
+    }
+}
 
-        let stream = response
-            .bytes_stream()
-            .map(|item| item.map(|bytes| String::from_utf8_lossy(&bytes).into_owned()));
+#[derive(Debug, Deserialize)]
+struct GeminiResponse {
+    candidates: Vec<GeminiCandidate>,
+}
 
-        Ok(Box::pin(stream))
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+struct GeminiCandidate {
+    content: GeminiContent,
+    finishReason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GeminiContent {
+    parts: Vec<GeminiPart>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GeminiPart {
+    text: String,
+}
+
+#[derive(Debug, Serialize)]
+struct OpenAIResponse {
+    choices: Vec<OpenAIChoice>,
+}
+
+#[derive(Debug, Serialize)]
+struct OpenAIChoice {
+    index: usize,
+    delta: OpenAIDelta,
+}
+
+#[derive(Debug, Serialize)]
+struct OpenAIDelta {
+    content: String,
+}
+
+fn parse_and_transform_chunk(chunk: &str) -> Result<String, String> {
+    let cleaned_chunk = chunk.trim_start_matches("data: ").trim();
+    if cleaned_chunk.is_empty() {
+        return Err("Empty chunk".to_string());
+    }
+    let gemini_response: GeminiResponse =
+        serde_json::from_str(cleaned_chunk).map_err(|e| format!("JSON parse error: {}", e))?;
+
+    if let Some(candidate) = gemini_response.candidates.first() {
+        println!("{:?}", candidate.finishReason);
+        if let Some(part) = candidate.content.parts.first() {
+            let openai_response = OpenAIResponse {
+                choices: vec![OpenAIChoice {
+                    index: 0,
+                    delta: OpenAIDelta {
+                        content: part.text.clone(),
+                    },
+                }],
+            };
+
+            serde_json::to_string(&openai_response)
+                .map(|json_str| format!("data: {}\n\n", json_str))
+                .map_err(|e| format!("Serialization error: {}", e))
+        } else {
+            Err("No parts found in Gemini response".to_string())
+        }
+    } else {
+        Err("No candidates found in Gemini response".to_string())
     }
 }
