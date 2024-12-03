@@ -24,7 +24,7 @@ async fn main() -> std::io::Result<()> {
     .unwrap();
     builder.password(redis_settings.redis_password);
 
-    let redis_client = builder.paired_connect().await.unwrap();
+    let redis_client = builder.paired_connect().await.ok();
 
     HttpServer::new(move || {
         App::new().service(

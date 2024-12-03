@@ -44,7 +44,7 @@ pub enum ApiSupplier {
         api_key: String,
     },
     Gemini {
-        redis_client: PairedConnection,
+        redis_client: Option<PairedConnection>,
         url: String,
         model: String,
         api_key: String,
@@ -54,8 +54,11 @@ pub enum ApiSupplier {
     },
 }
 
-async fn rate_limit(redis_client: &PairedConnection, rate_limit: u16) -> bool {
-    let connect_inner = redis_client.clone();
+async fn rate_limit(redis_client: &Option<PairedConnection>, rate_limit: u16) -> bool {
+    let connect_inner = match redis_client {
+        Some(client) => client.clone(),
+        None => return false,
+    };
     let now = Utc::now();
     let current_minute = now.format("%Y-%m-%dT%H:%M").to_string();
     let redis_key = format!("rate_limit_{}", current_minute);

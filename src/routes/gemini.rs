@@ -5,7 +5,7 @@ use crate::services::{ApiServiceManager, ApiSupplier};
 use redis_async::client::PairedConnection;
 use std::env;
 
-pub fn gemini_routes(redis_client: PairedConnection) -> Scope {
+pub fn gemini_routes(redis_client: Option<PairedConnection>) -> Scope {
     let gemini_supplier = ApiSupplier::Gemini {
         redis_client: redis_client.clone(),
         url: env::var("GEMINI_URL").unwrap_or("".to_string()),
