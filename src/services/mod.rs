@@ -227,7 +227,11 @@ impl ApiServiceManager {
                     })
                 });
 
-                Ok(Box::pin(stream))
+                let full_stream = stream.chain(futures::stream::once(async {
+                    Ok("data: [DONE]".to_owned())
+                }));
+
+                Ok(Box::pin(full_stream))
             }
             _ => {
                 let request_body = serde_json::json!({
@@ -267,7 +271,7 @@ struct GeminiResponse {
 #[allow(non_snake_case)]
 struct GeminiCandidate {
     content: GeminiContent,
-    finishReason: Option<String>,
+    // finishReason: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -305,7 +309,6 @@ fn parse_and_transform_chunk(chunk: &str) -> Result<String, String> {
         serde_json::from_str(cleaned_chunk).map_err(|e| format!("JSON parse error: {}", e))?;
 
     if let Some(candidate) = gemini_response.candidates.first() {
-        println!("{:?}", candidate.finishReason);
         if let Some(part) = candidate.content.parts.first() {
             let openai_response = OpenAIResponse {
                 choices: vec![OpenAIChoice {
