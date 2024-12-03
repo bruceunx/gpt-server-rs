@@ -17,10 +17,15 @@ async fn main() -> std::io::Result<()> {
 
     let redis_settings = services::RedisSettings::from_env();
 
-    let redis_client =
-        redis_async::client::paired_connect(&redis_settings.redis_host, redis_settings.redis_port)
-            .await
-            .unwrap();
+    let mut builder = redis_async::client::ConnectionBuilder::new(
+        &redis_settings.redis_host,
+        redis_settings.redis_port,
+    )
+    .unwrap();
+    builder.password(redis_settings.redis_password);
+
+    let redis_client = builder.paired_connect().await.unwrap();
+    println!("{:?}", redis_client);
 
     HttpServer::new(move || {
         App::new().service(

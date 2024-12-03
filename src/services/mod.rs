@@ -16,6 +16,7 @@ pub struct ApiServiceManager {
 pub struct RedisSettings {
     pub redis_host: String,
     pub redis_port: u16,
+    pub redis_password: String,
 }
 
 impl RedisSettings {
@@ -24,6 +25,7 @@ impl RedisSettings {
             redis_host: env::var("REDIS_HOST").unwrap_or("".to_string()),
             redis_port: env::var("REDIS_PORT")
                 .map_or_else(|_| 0, |value| value.parse().unwrap_or(0)),
+            redis_password: env::var("REDIS_PASSWORD").unwrap_or("".to_string()),
         }
     }
 }
@@ -48,35 +50,34 @@ pub enum ApiSupplier {
         pro_url: String,
         pro_model: String,
         rate_limit_per_minute: u16,
-        redis_password: String,
     },
 }
 
-async fn rate_limit(redis_client: &PairedConnection, rate_limit: u16, password: &str) -> bool {
-    match redis_client.send(resp_array!["AUTH", password]).await {
-        Ok(()) => {
-            let now = Utc::now();
-            let current_minute = now.format("%Y-%m-%dT%H:%M").to_string();
-            let redis_key = format!("rate_limit_{}", current_minute);
+async fn rate_limit(redis_client: &PairedConnection, rate_limit: u16) -> bool {
+    let connect_inner = redis_client.clone();
+    let now = Utc::now();
+    let current_minute = now.format("%Y-%m-%dT%H:%M").to_string();
+    let redis_key = format!("rate_limit_{}", current_minute);
 
-            let current_count: i64 = match redis_client.send(resp_array!["INCR", &redis_key]).await
-            {
-                Ok(value) => value,
-                Err(_) => return false,
-            };
+    let current_count: i64 = match connect_inner.send(resp_array!["INCR", &redis_key]).await {
+        Ok(value) => value,
+        Err(_) => return false,
+    };
 
-            if current_count == 1 {
-                redis_client.send_and_forget(resp_array![
-                    "EXPIREAT",
-                    &redis_key,
-                    RespValue::Integer((now + chrono::Duration::minutes(1)).timestamp()),
-                ]);
-            }
+    // println!("current_count {}, {}", current_count, rate_limit);
+    // if current_count == 1 {
+    //     let _: i64 = redis_client
+    //         .clone()
+    //         .send(resp_array![
+    //             "EXPIREAT",
+    //             &redis_key,
+    //             RespValue::Integer((now + chrono::Duration::minutes(1)).timestamp())
+    //         ])
+    //         .await
+    //         .unwrap();
+    // }
 
-            current_count <= rate_limit as i64
-        }
-        Err(_) => false,
-    }
+    current_count <= rate_limit as i64
 }
 
 impl ApiSupplier {
@@ -89,10 +90,9 @@ impl ApiSupplier {
                 redis_client,
                 rate_limit_per_minute,
                 pro_url,
-                redis_password,
                 ..
             } => {
-                if rate_limit(redis_client, *rate_limit_per_minute, redis_password).await {
+                if rate_limit(redis_client, *rate_limit_per_minute).await {
                     pro_url
                 } else {
                     url
@@ -110,15 +110,35 @@ impl ApiSupplier {
                 pro_model,
                 redis_client,
                 rate_limit_per_minute,
-                redis_password,
                 ..
             } => {
-                if rate_limit(redis_client, *rate_limit_per_minute, redis_password).await {
+                if rate_limit(redis_client, *rate_limit_per_minute).await {
                     pro_model
                 } else {
                     model
                 }
             }
+        }
+    }
+
+    pub async fn get_gemini_model_url(&self) -> (&str, &str) {
+        match self {
+            ApiSupplier::Gemini {
+                redis_client,
+                url,
+                model,
+                pro_url,
+                pro_model,
+                rate_limit_per_minute,
+                ..
+            } => {
+                if rate_limit(redis_client, *rate_limit_per_minute).await {
+                    (pro_model, pro_url)
+                } else {
+                    (model, url)
+                }
+            }
+            _ => panic!("not support other ai suppliers"),
         }
     }
 
@@ -181,13 +201,14 @@ impl ApiServiceManager {
                     contents.push(json!(single_message));
                 }
 
+                let (model, url) = self.supplier.get_gemini_model_url().await;
+
                 let request_body = serde_json::json!({
-                    "model": self.supplier.get_model().await,
+                    "model": model,
                     "contents": contents,
                 });
-
                 self.client
-                    .post(self.supplier.get_url().await)
+                    .post(url)
                     .json(&request_body)
                     .send()
                     .await
