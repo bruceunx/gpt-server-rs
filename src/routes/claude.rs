@@ -8,7 +8,7 @@ pub fn claude_routes() -> Scope {
     let openai_supplier = ApiSupplier::Claude {
         url: env::var("CLAUDE_URL").unwrap_or("".to_string()),
         api_key: env::var("CLAUDE_KEY").unwrap_or("".to_string()),
-        model: env::var("CLAUDE_MODEL").unwrap_or("gpt-4o-turbo".to_string()),
+        model: env::var("CLAUDE_MODEL").unwrap_or("claude-3.5-sonnet".to_string()),
     };
 
     let openai_service = web::Data::new(ApiServiceManager::new(openai_supplier));
