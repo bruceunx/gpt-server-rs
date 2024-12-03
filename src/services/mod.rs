@@ -2,6 +2,7 @@ use super::models::prompt::Prompt;
 use futures::stream::{Stream, StreamExt};
 use reqwest::{header, Client};
 use std::pin::Pin;
+use std::time::Duration;
 
 pub struct ApiServiceManager {
     client: Client,
@@ -47,7 +48,10 @@ impl ApiSupplier {
 
 impl ApiServiceManager {
     pub fn new(supplier: ApiSupplier) -> Self {
-        let client = Client::builder().build().unwrap();
+        let client = Client::builder()
+            .timeout(Duration::from_secs(3))
+            .build()
+            .unwrap();
         Self { client, supplier }
     }
 
