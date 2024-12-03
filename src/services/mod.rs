@@ -2,7 +2,7 @@ use super::models::prompt::Prompt;
 use chrono::prelude::*;
 use futures::stream::{Stream, StreamExt};
 use redis_async::{client::PairedConnection, resp_array};
-use reqwest::{header, Client, Proxy};
+use reqwest::{header, Client};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
