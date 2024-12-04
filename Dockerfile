@@ -6,11 +6,19 @@ COPY . .
 
 RUN cargo build --release
 
-FROM debian:bullseye-slim
 
-RUN apt-get update && \
-    apt-get install -y openssl ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
+FROM alpine:3.20
+
+RUN apk add --no-cache \
+    libgcc \
+    openssl \
+    ca-certificates
+
+# FROM debian:bullseye-slim
+#
+# RUN apt-get update && \
+#     apt-get install -y openssl ca-certificates && \
+#     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
