@@ -20,5 +20,5 @@ jobs:
 
       - name: Build and push Docker image
         run: |
-          docker build -t brucexun/gpt-rs:alpine .
-          docker push brucexun/gpt-rs:alpine
+          docker build -t brucexun/gpt-rs:latest .
+          docker push brucexun/gpt-rs:latest

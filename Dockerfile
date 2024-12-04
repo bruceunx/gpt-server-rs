@@ -1,11 +1,4 @@
-FROM rust:1.83-alpine3.20 AS builder
-
-RUN apk add --no-cache \
-    musl-dev \
-    openssl-dev \
-    build-base \
-    pkgconfig
-
+FROM rust:1.83-bullseye AS builder
 
 WORKDIR /app
 
@@ -13,12 +6,11 @@ COPY . .
 
 RUN cargo build --release
 
-FROM alpine:3.20
+FROM debian:bullseye-slim
 
-RUN apk add --no-cache \
-    openssl \
-    ca-certificates \
-    libgcc
+RUN apt-get update && \
+    apt-get install -y openssl ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
